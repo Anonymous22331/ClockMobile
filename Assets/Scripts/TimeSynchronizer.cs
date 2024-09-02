@@ -4,8 +4,11 @@ using UnityEngine;
 using UnityEngine.Networking;
 public class TimeSynchronizer : MonoBehaviour
 {
-    private string _firstTimeApiUrl = "http://worldtimeapi.org/api/timezone/Etc/UTC";
-    private string _secondTimeApiUrl = "https://timeapi.io/api/time/current/zone?timeZone=Europe%2FMoscow";
+    private string [] _allTimeApiUrls = new []
+    {
+        "http://worldtimeapi.org/api/timezone/Etc/UTC",
+        "https://timeapi.io/api/time/current/zone?timeZone=Europe%2FMoscow"
+    } ;
     private DateTime _synchronizedTime;
     public bool IsTimeSynchronized { get; private set; } = false;
     
@@ -30,35 +33,32 @@ public class TimeSynchronizer : MonoBehaviour
     private IEnumerator SynchronizeTimeCoroutine()
     {
         IsTimeSynchronized = false;
-        UnityWebRequest firstRequest = UnityWebRequest.Get(_firstTimeApiUrl);
-        yield return firstRequest.SendWebRequest();
-       
-        if (firstRequest.result != UnityWebRequest.Result.Success)
+        bool success = false;
+        
+        foreach (string url in _allTimeApiUrls)
         {
-            Debug.Log("Не удалось подключиться к первому сервису");
-            UnityWebRequest secondRequest = UnityWebRequest.Get(_secondTimeApiUrl);
-            yield return secondRequest.SendWebRequest();
+            UnityWebRequest request = UnityWebRequest.Get(url);
+            yield return request.SendWebRequest();
 
-            if (secondRequest.result != UnityWebRequest.Result.Success)
+            if (request.result == UnityWebRequest.Result.Success)
             {
-                Debug.Log("Ошибка подключения к сервисам, проверьте соединение с интернетом!");
-                _synchronizedTime = DateTime.Now;
-                Debug.Log("Выставлено время с компьютера");
-
+                string jsonResult = request.downloadHandler.text;
+                jsonResult = jsonResult.Replace("DateTime", "datetime", StringComparison.OrdinalIgnoreCase);
+                TimeData timeData = JsonUtility.FromJson<TimeData>(jsonResult);
+                _synchronizedTime = DateTime.Parse(timeData.datetime);
+                success = true;
+                break;
             }
             else
             {
-                string jsonResult = secondRequest.downloadHandler.text;
-                jsonResult = jsonResult.Replace("dateTime", "datetime");
-                TimeData timeData = JsonUtility.FromJson<TimeData>(jsonResult);
-                _synchronizedTime = DateTime.Parse(timeData.datetime);
+                Debug.Log($"Не удалось подключиться к сервису: {url}");
             }
         }
-        else
+        if (!success)
         {
-            string jsonResult = firstRequest.downloadHandler.text;
-            TimeData timeData = JsonUtility.FromJson<TimeData>(jsonResult);
-            _synchronizedTime = DateTime.Parse(timeData.datetime);
+            Debug.Log("Ошибка подключения к сервисам, проверьте соединение с интернетом!");
+            _synchronizedTime = DateTime.Now;
+            Debug.Log("Выставлено время с компьютера");
         }
         
         IsTimeSynchronized = true;
